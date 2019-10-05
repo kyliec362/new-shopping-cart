@@ -1,3 +1,7 @@
+LINK TO PUBLIC DEPLOYED SITE: https://new-shopping-cart-9fd64.firebaseapp.com
+
+
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
