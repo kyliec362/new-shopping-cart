@@ -21,15 +21,35 @@ import IconButton from '@material-ui/core/IconButton';
 
 const availableSizes = ['S', 'M', 'L', 'XL'];
 
+function roundToTwo(num) {    
+  return +(Math.round(num + "e+2")  + "e-2");
+}
+
 class CartListItem extends React.Component {
+
+  removeFromCart = (setCartItems, cartItems, product, cartQuantities, setCartQuantities) => {
+    cartQuantities.set(product.title, cartQuantities.get(product.title) - 1);
+    if (cartQuantities.get(product.title) <= 0) {
+      cartQuantities.delete(product.title)
+      cartItems = cartItems.filter(function(p) { return p.title != product.title; }); 
+    }
+    setCartItems(cartItems);
+    setCartQuantities(cartQuantities); 
+    this.forceUpdate()
+  };
+
+
   render() {
     const product = this.props.product;
+    const cartItems = this.props.cartItems;
+    const setCartItems = this.props.setCartItems; 
+    const cartQuantities = this.props.cartQuantities;
+    const setCartQuantities = this.props.setCartQuantities; 
     return (
       <ListItem button style={{width: '100%', height: '100%'}}>
           <img style={{maxHeight: '20%', maxWidth: '20%'}} src={`./data/products/${product.sku}_1.jpg`} alt=''/>
-          <ListItemText style={{float: 'right', padding:'5%'}} primary={product.title}/>
-          <ListItemText style={{float: 'right', padding:'5%'}} primary={'$' + product.price} />
-          <IconButton edge="end" aria-label="delete" style={{float: 'right', padding:'5%'}}>
+          <p style={{width: '70%', margin: '2%'}}>{product.title} <br></br> {"$" + product.price + ' x ' + cartQuantities.get(product.title)}</p>
+          <IconButton onClick = {() => this.removeFromCart(setCartItems, cartItems, product, cartQuantities, setCartQuantities)} edge="end" aria-label="delete" style={{float: 'right', padding:'5%'}}>
             <DeleteIcon style={{color: 'white'}}/>
           </IconButton>
         </ListItem>
@@ -39,25 +59,27 @@ class CartListItem extends React.Component {
 
 class Cart extends React.Component {
 
-  checkout = (cartItems) => {
-    alert(this.subtotal(cartItems)); 
+  checkout = (cartItems, cartQuantities) => {
+    alert(this.subtotal(cartItems, cartQuantities)); 
   }
 
-  subtotal = (cartItems) => {
-    return new String("Subtotal: $" + cartItems.reduce((a, b) => a + b.price, 0));
+  subtotal = (cartItems, cartQuantities) => {
+    return new String("Subtotal: $" + roundToTwo(cartItems.reduce((a, b) => a + (cartQuantities.get(b.title) * b.price), 0)));
   }
 
   render() {
     const cartItems = this.props.cartItems;
     const setCartItems = this.props.setCartItems; 
+    const cartQuantities = this.props.cartQuantities;
+    const setCartQuantities = this.props.setCartQuantities; 
     return (
       <div style={{padding: '1%', width: '30%', height: '100%', marginLeft: '70%', float: 'right', color: 'white', backgroundColor: "#161616", outlineColor: "black"}} >
         <div style={{width: '100%', height: '10%', textAlign:'center'}}><h2>Cart</h2></div>
         <List style={{maxHeight: '70%', overflow: 'auto'}} component="nav">
-          {cartItems.map(product => <CartListItem product={product}></CartListItem>)}
+          {cartItems.map(product => <CartListItem product={product} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities} cartItems = {cartItems} setCartItems = {setCartItems}></CartListItem>)}
         </List>
-        <div style={{width: '100%', height: '10%', textAlign:'center'}}><h2>{this.subtotal(cartItems)}</h2></div>
-        <div><Button onClick = {() => this.checkout(cartItems)} variant="contained" size="medium" color="#202020" style = {{margin: '0 auto', display: 'block'}}>
+        <div style={{width: '100%', height: '10%', textAlign:'center'}}><h2>{this.subtotal(cartItems, cartQuantities)}</h2></div>
+        <div><Button onClick = {() => this.checkout(cartItems, cartQuantities)} variant="contained" size="medium" color="#202020" style = {{margin: '0 auto', display: 'block'}}>
           Checkout
         </Button></div>
       </div>
@@ -118,21 +140,33 @@ class SizeFilter extends React.Component {
 
 class Product extends React.Component {
 
-  addToCart = (setCartItems, cartItems, product) => {
-    cartItems.push(product);
-    setCartItems(cartItems);
+  addToCart = (setCartItems, cartItems, product, cartQuantities, setCartQuantities) => {
+    console.log(cartQuantities)
+    if (cartQuantities.has(product.title)) { //already in cart, just adding to quantity 
+      cartQuantities.set(product.title, cartQuantities.get(product.title) + 1);
+      setCartQuantities(cartQuantities); 
+    }
+    else {
+      cartItems.push(product);
+      cartQuantities.set(product.title, 1);
+      setCartQuantities(cartQuantities); 
+      setCartItems(cartItems);
+    }
+
   }
 
   render() {
     const product = this.props.product;
     const cartItems = this.props.cartItems; 
     const setCartItems = this.props.setCartItems; 
+    const cartQuantities = this.props.cartQuantities;
+    const setCartQuantities = this.props.setCartQuantities; 
     return (
       <Card style={{textAlign: 'center', width: '25%', margin: '0.5%'}}>
       <img src={`./data/products/${product.sku}_2.jpg`} alt=''/>
       <div>{product.title}</div>
       <div>${product.price}</div>
-      <Button onClick = {() => this.addToCart(setCartItems, cartItems, product)} variant="contained" size="medium" color="#161616" style = {{margin: '3%'}}>
+      <Button onClick = {() => this.addToCart(setCartItems, cartItems, product, cartQuantities, setCartQuantities)} variant="contained" size="medium" color="#161616" style = {{margin: '3%'}}>
           Add to Cart
       </Button>
     </Card>
@@ -146,6 +180,7 @@ const App = () => {
   const [data, setData] = useState({});
   const [isCartOpen, setIsCartOpen] = useState('cartOpen');
   const [cartItems, setCartItems] = useState([]); 
+  const [cartQuantities, setCartQuantities] = useState(new Map()); 
   const products = Object.values(data);
 
   useEffect(() => {
@@ -170,12 +205,12 @@ const App = () => {
     <div>
     <div style={{width: '100%'}}><CartLogo clickHandler = {handleCartOpen}></CartLogo></div>
     <Modal open={isCartOpen} onClose={handleCartClose}>
-      {<Cart cartItems = {cartItems} setCartItems = {setCartItems}></Cart>}
+      {<Cart cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></Cart>}
     </Modal>
     <Grid style={{marginTop: '10%'}} container>
       <SizeFilter/>
       <Grid style={{width: '85%', marginTop: '0%'}} container spacing={10} justify="center"  >
-        {products.map(product => <Product cartItems = {cartItems} setCartItems = {setCartItems} product={product}>{product.title}</Product>)}
+        {products.map(product => <Product cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities} cartItems = {cartItems} setCartItems = {setCartItems} product={product}>{product.title}</Product>)}
       </Grid>
     </Grid>
     </div>
