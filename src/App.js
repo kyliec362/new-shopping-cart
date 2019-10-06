@@ -14,9 +14,27 @@ import ListItem from '@material-ui/core/ListItem';
 import Button from '@material-ui/core/Button';
 import DeleteIcon from '@material-ui/icons/Delete';
 import IconButton from '@material-ui/core/IconButton';
+import firebase from 'firebase/app';
+import 'firebase/database';
+import 'firebase/auth';
+//import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
 
 
 const availableSizes = ['S', 'M', 'L', 'XL'];
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCybllzB-XTvyi0rZ2E1eUsGx0ytx1i9NI",
+  authDomain: "new-shopping-cart-9fd64.firebaseapp.com",
+  databaseURL: "https://new-shopping-cart-9fd64.firebaseio.com",
+  projectId: "new-shopping-cart-9fd64",
+  storageBucket: "new-shopping-cart-9fd64.appspot.com",
+  messagingSenderId: "199856128773",
+  appId: "1:199856128773:web:fbb27fdc7fc1929b736d6c",
+  measurementId: "G-KZDM27XZ7M"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref();
 
 function roundToTwo(num) {    
   return +(Math.round(num + "e+2")  + "e-2");
@@ -244,12 +262,11 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    const fetchInventory = async () => {
-      const response = await fetch('./data/inventory.json');
-      const json = await response.json();
-      setInventory(json);
-    };
-    fetchInventory();
+    const handleData = snap => {
+      if (snap.val()) {setInventory(snap.val())};
+    }
+    db.on('value', handleData, error => alert(error));
+    return () => { db.off('value', handleData); };
   }, []);
 
   const handleCartOpen = () => {
