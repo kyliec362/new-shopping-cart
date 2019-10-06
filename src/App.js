@@ -17,7 +17,8 @@ import IconButton from '@material-ui/core/IconButton';
 import firebase from 'firebase/app';
 import 'firebase/database';
 import 'firebase/auth';
-//import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
+import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
+import { Message } from "rbx";
 
 
 const availableSizes = ['S', 'M', 'L', 'XL'];
@@ -35,6 +36,41 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database().ref();
+
+// AUTH UI
+const uiConfig = {
+  signInFlow: 'popup',
+  signInOptions: [
+    firebase.auth.GoogleAuthProvider.PROVIDER_ID
+  ],
+  callbacks: {
+    signInSuccessWithAuthResult: () => false
+  }
+};
+
+const Welcome = ({ user }) => (
+  <Message color="info">
+    <Message.Header>
+      Welcome, {user.displayName}
+      <Button primary onClick={() => firebase.auth().signOut()} style={{color:'white', float:'right', marginRight: '3%'}}>
+        Log out
+      </Button>
+    </Message.Header>
+  </Message>
+);
+
+const SignIn = () => (
+  <StyledFirebaseAuth
+    uiConfig={uiConfig}
+    firebaseAuth={firebase.auth()}
+  />
+);
+
+const Banner = ({ user }) => (
+  <React.Fragment>
+    { user ? <Welcome user={ user } /> : <SignIn /> }
+  </React.Fragment>
+);
 
 function roundToTwo(num) {    
   return +(Math.round(num + "e+2")  + "e-2");
@@ -240,6 +276,8 @@ class Product extends React.Component {
 
 }
 
+
+
 const App = () => {
 
   const [data, setData] = useState({});
@@ -249,6 +287,7 @@ const App = () => {
   const [inventory, setInventory] = useState({});
   const [selectedCheckboxes, setSelectedCheckboxes] = useState(new Set());
   const [updateFlag, setUpdateFlag] = useState(false);
+  const [user, setUser] = useState(null);
   const products = Object.values(data);
 
   useEffect(() => {
@@ -269,6 +308,10 @@ const App = () => {
     return () => { db.off('value', handleData); };
   }, []);
 
+  useEffect(() => {
+    firebase.auth().onAuthStateChanged(setUser);
+  }, []);
+
   const handleCartOpen = () => {
     setIsCartOpen(true);
   };
@@ -279,6 +322,9 @@ const App = () => {
 
   return (
     <div>
+      <div style = {{backgroundColor: '#202020', color: "white", padding: "2%", width: '100%'}}>
+        <Banner user={ user } />
+      </div>
     <div style={{width: '100%'}}><CartLogo clickHandler = {handleCartOpen}></CartLogo></div>
     <Modal open={isCartOpen} onClose={handleCartClose}>
       {<Cart cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></Cart>}
