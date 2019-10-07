@@ -14,12 +14,13 @@ import ListItem from '@material-ui/core/ListItem';
 import Button from '@material-ui/core/Button';
 import DeleteIcon from '@material-ui/icons/Delete';
 import IconButton from '@material-ui/core/IconButton';
+import ArrowDropDownIcon from '@material-ui/icons/ArrowDropDown';
 import firebase from 'firebase/app';
 import 'firebase/database';
 import 'firebase/auth';
 import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
 import { Message } from "rbx";
-
+import Select from '@material-ui/core/Select';
 
 const availableSizes = ['S', 'M', 'L', 'XL'];
 
@@ -36,6 +37,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database().ref();
+const dbInventory = db.child("inventory");
 
 // AUTH UI
 const uiConfig = {
@@ -77,7 +79,6 @@ function roundToTwo(num) {
 }
 
 
-
 class CartListItem extends React.Component {
 
   removeFromCart = (setCartItems, cartItems, product, cartQuantities, setCartQuantities) => {
@@ -112,8 +113,20 @@ class CartListItem extends React.Component {
 
 class Cart extends React.Component {
 
-  checkout = (cartItems, cartQuantities) => {
+  checkout = (cartItems, cartQuantities, user, setCartItems, setCartQuantities, inventory, setInventory) => {
     alert(this.subtotal(cartItems, cartQuantities)); 
+    cartItems.forEach(item => {
+      console.log(item.sku);
+      inventory[item.sku][item.size] = (inventory[item.sku][item.size] - cartQuantities.get(item.title))})
+    setInventory(inventory);
+    dbInventory.set(inventory)
+    cartItems = [];
+    cartQuantities = new Map();
+    setCartItems(cartItems); 
+    setCartQuantities(cartQuantities); 
+    setFirebaseCart(user.uid,cartItems, cartQuantities); 
+    alert("Checkout complete! Thanks for your purchase"); 
+
   }
 
   subtotal = (cartItems, cartQuantities) => {
@@ -121,10 +134,13 @@ class Cart extends React.Component {
   }
 
   render() {
+    const user = this.props.user; 
     const cartItems = this.props.cartItems;
     const setCartItems = this.props.setCartItems; 
     const cartQuantities = this.props.cartQuantities;
     const setCartQuantities = this.props.setCartQuantities; 
+    const inventory = this.props.inventory;
+    const setInventory = this.props.setInventory; 
     return (
       <div style={{padding: '1%', width: '30%', height: '100%', marginLeft: '70%', float: 'right', color: 'white', backgroundColor: "#161616", outlineColor: "black"}} >
         <div style={{width: '100%', height: '10%', textAlign:'center'}}><h2>Cart</h2></div>
@@ -132,7 +148,10 @@ class Cart extends React.Component {
           {cartItems.map(product => <CartListItem product={product} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities} cartItems = {cartItems} setCartItems = {setCartItems}></CartListItem>)}
         </List>
         <div style={{width: '100%', height: '10%', textAlign:'center'}}><h2>{this.subtotal(cartItems, cartQuantities)}</h2></div>
-        <div><Button onClick = {() => this.checkout(cartItems, cartQuantities)} variant="contained" size="medium" color="#202020" style = {{margin: '0 auto', display: 'block'}}>
+        <div style={{margin: '5%'}}><Button  onClick = {() => this.forceUpdate()} variant="contained" size="medium" color="#202020" style = {{margin: '0 auto', display: 'block'}}>
+          Update Subtotal
+        </Button></div>
+        <div><Button onClick = {() => this.checkout(cartItems, cartQuantities, user, setCartItems, setCartQuantities, inventory, setInventory)} variant="contained" size="medium" color="#202020" style = {{margin: '0 auto', display: 'block'}}>
           Checkout
         </Button></div>
       </div>
@@ -160,7 +179,6 @@ class SizeFilter extends React.Component {
     else 
       selectedCheckboxes.add(label);
     setSelectedCheckboxes(selectedCheckboxes);
-    console.log(109, selectedCheckboxes);
     setUpdateFlag(!updateFlag);
 
   }
@@ -220,6 +238,7 @@ class ProductGrid extends React.Component {
   };
 
   render() {
+    const user = this.props.user; 
     const products = this.props.products;
     const inventory = this.props.inventory;
     const cartItems = this.props.cartItems; 
@@ -232,7 +251,7 @@ class ProductGrid extends React.Component {
     var availableProducts = this.filterProducts(products, selectedCheckboxes, inventory);
     return (
       <Grid style={{width: '85%', marginTop: '0%'}} container spacing={10} justify="center"  >
-        {availableProducts.map(product => <Product stock = {inventory[product.sku]} selectedCheckboxes = {selectedCheckboxes} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities} cartItems = {cartItems} setCartItems = {setCartItems} product={product}>{product.title}</Product>)}
+        {availableProducts.map(product => <Product selectedCheckboxes = {selectedCheckboxes} user = {user} stock = {inventory[product.sku]} selectedCheckboxes = {selectedCheckboxes} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities} cartItems = {cartItems} setCartItems = {setCartItems} product={product}>{product.title}</Product>)}
       </Grid>
     );
   };
@@ -242,32 +261,63 @@ class ProductGrid extends React.Component {
 
 class Product extends React.Component {
 
-  addToCart = (setCartItems, cartItems, product, cartQuantities, setCartQuantities) => {
+  getSizeFromInventory = (selectedCheckboxes, sku, quantity, stock) => {
+    var validSize = -1;
+    if (selectedCheckboxes.size == 0){
+      alert("Please select allowable sizes")
+      return validSize;
+    }
+    availableSizes.forEach(size => {
+      console.log(stock[size], quantity)
+      if (selectedCheckboxes.has(size) && stock[size] >= quantity)
+        validSize =  size;
+    });
+    if (validSize == -1) {
+      alert("Not enough stock in inventory to add to cart");
+    }
+    return validSize; 
+  }
+
+  addToCart = (setCartItems, cartItems, product, cartQuantities, setCartQuantities, user, selectedCheckboxes, stock) => {
+    //TODO make sure there is enough inventory
     if (cartQuantities.has(product.title)) { //already in cart, just adding to quantity 
       cartQuantities.set(product.title, cartQuantities.get(product.title) + 1);
-      setCartQuantities(cartQuantities); 
+      cartItems = cartItems.filter(function(p) { return p.title != product.title; }); //remove item and re-add it with correct count field
     }
     else {
-      cartItems.push(product);
       cartQuantities.set(product.title, 1);
-      setCartQuantities(cartQuantities); 
-      setCartItems(cartItems);
     }
-
+    product['count'] = cartQuantities.get(product.title); 
+    var size =  this.getSizeFromInventory(selectedCheckboxes, product.sku, product.count, stock); 
+    if (size == -1) {
+      cartQuantities.set(product.title, cartQuantities.get(product.title) - 1);
+      cartItems = cartItems.filter(function(p) { return p.title != product.title; }); //remove item and re-add it with correct count field
+      setCartItems(cartItems);
+      setCartQuantities(cartQuantities); 
+      return;
+    }
+    product['size'] = size;
+    cartItems.push(product);
+    setCartItems(cartItems);
+    setCartQuantities(cartQuantities); 
+    setFirebaseCart(user.uid, cartItems, cartQuantities); 
   }
 
   render() {
+    const user = this.props.user; 
+    const stock = this.props.stock; 
     const product = this.props.product;
     const cartItems = this.props.cartItems; 
     const setCartItems = this.props.setCartItems; 
     const cartQuantities = this.props.cartQuantities;
     const setCartQuantities = this.props.setCartQuantities; 
+    const selectedCheckboxes = this.props.selectedCheckboxes; 
     return (
       <Card style={{textAlign: 'center', width: '25%', margin: '0.5%'}}>
       <img src={`./data/products/${product.sku}_2.jpg`} alt=''/>
       <div>{product.title}</div>
-      <div>${product.price}</div>
-      <Button onClick = {() => this.addToCart(setCartItems, cartItems, product, cartQuantities, setCartQuantities)} variant="contained" size="medium" color="#161616" style = {{margin: '3%'}}>
+      <div>${product.price}</div>    
+      <Button onClick = {() => this.addToCart(setCartItems, cartItems, product, cartQuantities, setCartQuantities, user, selectedCheckboxes, stock)} variant="contained" size="medium" color="#161616" style = {{margin: '3%'}}>
           Add to Cart
       </Button>
     </Card>
@@ -275,6 +325,20 @@ class Product extends React.Component {
   }
 
 }
+
+var setFirebaseCart = (uid, cartItems, cartQuantities) => {
+  //TODO make sure cart is valid against inventory
+  var cartItemsWithCount = []
+  cartItems.forEach(function(item) {
+    if (! item.hasOwnProperty('count')) {
+      item['count'] = cartQuantities.get(item.title)
+    }
+    cartItemsWithCount.push(item)      
+  });
+  var obj = {};
+  obj[uid] = cartItemsWithCount;
+  db.child('carts').set(obj); 
+};
 
 
 
@@ -287,6 +351,7 @@ const App = () => {
   const [inventory, setInventory] = useState({});
   const [selectedCheckboxes, setSelectedCheckboxes] = useState(new Set());
   const [updateFlag, setUpdateFlag] = useState(false);
+  const [cartPulledFlag, setCartPulledFlag] = useState(false);
   const [user, setUser] = useState(null);
   const products = Object.values(data);
 
@@ -304,13 +369,15 @@ const App = () => {
     const handleData = snap => {
       if (snap.val()) {setInventory(snap.val())};
     }
-    db.on('value', handleData, error => alert(error));
-    return () => { db.off('value', handleData); };
+    dbInventory.on('value', handleData, error => alert(error));
+    return () => { dbInventory.off('value', handleData); };
   }, []);
 
   useEffect(() => {
     firebase.auth().onAuthStateChanged(setUser);
+
   }, []);
+
 
   const handleCartOpen = () => {
     setIsCartOpen(true);
@@ -320,6 +387,42 @@ const App = () => {
     setIsCartOpen(false);
   };
 
+  if(user && !cartPulledFlag && cartItems && cartItems.length == 0) { //pull from database
+    if (cartItems == null) {
+      setCartItems([]);
+    }
+    var ref = db.child('carts');
+    try {
+      ref = ref.child(user.uid); 
+    }
+    catch {
+      setCartPulledFlag(true); //user has never populated a cart
+      return;
+    }
+    // Attach an asynchronous callback to read the data at our posts reference
+    ref.on("value", function(snapshot) {
+      var val = snapshot.val();
+      if (val == null) {
+        setCartPulledFlag(true); //user has never populated a cart
+        return;
+      }
+      val.forEach(function(prod){ //update quantities for cart items from db
+        cartQuantities.set(prod.title, prod.count); 
+        setCartQuantities(cartQuantities); 
+      });
+      setCartItems(val);
+      setCartPulledFlag(true); 
+    }, function (errorObject) {
+      console.log("The read failed: " + errorObject.code);
+    });
+
+  }
+
+
+  if(user && (cartPulledFlag || (cartItems && cartItems.length > 0))){ //they have items in their cart locally, so update firebase instance of cart
+    setFirebaseCart(user.uid, cartItems, cartQuantities);
+  }
+
   return (
     <div>
       <div style = {{backgroundColor: '#202020', color: "white", padding: "2%", width: '100%'}}>
@@ -327,11 +430,11 @@ const App = () => {
       </div>
     <div style={{width: '100%'}}><CartLogo clickHandler = {handleCartOpen}></CartLogo></div>
     <Modal open={isCartOpen} onClose={handleCartClose}>
-      {<Cart cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></Cart>}
+      {<Cart inventory = {inventory} setInventory = {setInventory} user = {user} cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></Cart>}
     </Modal>
     <Grid style={{marginTop: '10%'}} container updateFlag = {updateFlag} setUpdateFlag = {setUpdateFlag}> 
       <SizeFilter updateFlag = {updateFlag} setUpdateFlag = {setUpdateFlag} selectedCheckboxes = {selectedCheckboxes} setSelectedCheckboxes = {setSelectedCheckboxes}/>
-      <ProductGrid selectedCheckboxes = {selectedCheckboxes} setSelectedCheckboxes = {setSelectedCheckboxes} products = {products} inventory = {inventory} cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></ProductGrid>
+      <ProductGrid  user = {user} selectedCheckboxes = {selectedCheckboxes} setSelectedCheckboxes = {setSelectedCheckboxes} products = {products} inventory = {inventory} cartItems = {cartItems} setCartItems = {setCartItems} cartQuantities = {cartQuantities} setCartQuantities = {setCartQuantities}></ProductGrid>
     </Grid>
     </div>
   );
